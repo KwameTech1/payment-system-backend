@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(git --version)",
-      "Bash(gh --version)"
+      "Bash(gh --version)",
+      "Bash(pg_isready)",
+      "Bash(systemctl status:*)",
+      "Bash(psql -U postgres -c \"\\\\l\")",
+      "Bash(psql:*)",
+      "Bash(sudo -u postgres psql -c \"CREATE DATABASE payout_db;\" 2>&1)",
+      "Bash(npm run:*)",
+      "Bash(npx prisma:*)"
     ]
   }
 }

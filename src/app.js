@@ -8,6 +8,10 @@ const authRouter = require('./routes/auth');
 const recipientsRouter = require('./routes/recipients');
 const payoutsRouter = require('./routes/payouts');
 const webhooksRouter = require('./routes/webhooks');
+const clientAuthRouter = require('./routes/clientAuth');
+const clientPortalRouter = require('./routes/clientPortal');
+const clientsRouter = require('./routes/clients');
+const clientAuthMiddleware = require('./middleware/clientAuth');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -44,6 +48,9 @@ app.use('/auth', authRouter);
 app.use('/recipients', recipientsRouter);
 app.use('/payouts', payoutsRouter);
 app.use('/webhooks', webhooksRouter);
+app.use('/client/auth', clientAuthRouter);
+app.use('/client', clientAuthMiddleware, clientPortalRouter);
+app.use('/clients', clientsRouter);
 
 // ── 404 ───────────────────────────────────────────────────────────────────────
 app.use((_req, res) => {

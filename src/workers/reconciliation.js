@@ -12,11 +12,13 @@ const runReconciliation = async () => {
   let updated = 0;
 
   try {
+    // Also include payouts tied to settlements that are still in-flight
     const stuckPayouts = await prisma.payoutRequest.findMany({
       where: {
         status: { in: ['submitted', 'pending'] },
         updatedAt: { lt: TEN_MINUTES_AGO() },
       },
+      include: { settlement: true },
       take: 50,
     });
 

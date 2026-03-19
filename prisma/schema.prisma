@@ -47,18 +47,85 @@ model Recipient {
   @@map("recipients")
 }
 
+model Client {
+  id             String   @id @default(uuid())
+  businessName   String   @map("business_name")
+  email          String   @unique
+  passwordHash   String   @map("password_hash")
+  clientCode     String   @unique @map("client_code")
+  mobileNumber   String   @map("mobile_number")
+  mobileOperator String   @map("mobile_operator")
+  countryCode    String   @map("country_code")
+  currency       String
+  feeRate        Decimal  @default(0.02) @map("fee_rate")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  payinTransactions PayinTransaction[]
+  settlements       Settlement[]
+  ledgerEntries     LedgerEntry[]
+
+  @@map("clients")
+}
+
+model LedgerEntry {
+  id          String   @id @default(uuid())
+  clientId    String   @map("client_id")
+  type        String
+  amount      Decimal  @db.Decimal(15, 2)
+  currency    String
+  reference   String?
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  client Client @relation(fields: [clientId], references: [id])
+
+  @@map("ledger_entries")
+}
+
+model Settlement {
+  id              String    @id @default(uuid())
+  clientId        String    @map("client_id")
+  payinId         String    @unique @map("payin_id")
+  grossAmount     Decimal   @db.Decimal(15, 2) @map("gross_amount")
+  feeAmount       Decimal   @db.Decimal(15, 2) @map("fee_amount")
+  netAmount       Decimal   @db.Decimal(15, 2) @map("net_amount")
+  currency        String
+  status          String    @default("queued")
+  payoutRequestId String?   @unique @map("payout_request_id")
+  failureReason   String?   @map("failure_reason")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  settledAt       DateTime? @map("settled_at")
+
+  client        Client           @relation(fields: [clientId], references: [id])
+  payoutRequest PayoutRequest?   @relation(fields: [payoutRequestId], references: [id])
+  payin         PayinTransaction @relation(fields: [payinId], references: [id])
+
+  @@map("settlements")
+}
+
 model PayinTransaction {
-  id               String    @id @default(uuid())
-  fincraReference  String?   @unique @map("fincra_reference")
-  customerName     String?   @map("customer_name")
-  customerEmail    String?   @map("customer_email")
-  amount           Decimal   @db.Decimal(15, 2)
-  currency         String
-  status           String    @default("pending")
-  fincraRawPayload Json?     @map("fincra_raw_payload")
-  receivedAt       DateTime? @map("received_at")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  id                String    @id @default(uuid())
+  fincraReference   String?   @unique @map("fincra_reference")
+  customerName      String?   @map("customer_name")
+  customerEmail     String?   @map("customer_email")
+  customerReference String?   @map("customer_reference")
+  amount            Decimal   @db.Decimal(15, 2)
+  currency          String
+  status            String    @default("pending")
+  clientId          String?   @map("client_id")
+  clientCode        String?   @map("client_code")
+  isAttributed      Boolean   @default(false) @map("is_attributed")
+  feeAmount         Decimal?  @db.Decimal(15, 2) @map("fee_amount")
+  netAmount         Decimal?  @db.Decimal(15, 2) @map("net_amount")
+  fincraRawPayload  Json?     @map("fincra_raw_payload")
+  receivedAt        DateTime? @map("received_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  client     Client?    @relation(fields: [clientId], references: [id])
+  settlement Settlement?
 
   @@map("payin_transactions")
 }
@@ -67,8 +134,8 @@ model PayoutRequest {
   id              String    @id @default(uuid())
   clientReference String    @unique @map("client_reference")
   fincraReference String?   @map("fincra_reference")
-  recipientId     String    @map("recipient_id")
-  initiatedById   String    @map("initiated_by")
+  recipientId     String?   @map("recipient_id")
+  initiatedById   String?   @map("initiated_by")
   amount          Decimal   @db.Decimal(15, 2)
   currency        String
   reason          String?
@@ -83,11 +150,12 @@ model PayoutRequest {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  recipient     Recipient      @relation(fields: [recipientId], references: [id])
-  initiatedBy   User           @relation("InitiatedBy", fields: [initiatedById], references: [id])
+  recipient     Recipient?     @relation(fields: [recipientId], references: [id])
+  initiatedBy   User?          @relation("InitiatedBy", fields: [initiatedById], references: [id])
   parentPayout  PayoutRequest?  @relation("RetryChain", fields: [parentPayoutId], references: [id])
   retries       PayoutRequest[] @relation("RetryChain")
   webhookEvents WebhookEvent[]
+  settlement    Settlement?
 
   @@map("payout_requests")
 }

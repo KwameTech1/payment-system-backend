@@ -90,7 +90,20 @@ const applyWebhookStatusUpdate = async (clientReference, fincraStatus, _rawPaylo
       fincraStatus,
       settledAt: internalStatus === 'successful' ? new Date() : undefined,
     },
+    include: { settlement: true },
   });
+
+  // If this payout is tied to a settlement, update the settlement status too
+  if (updated.settlement) {
+    await prisma.settlement.update({
+      where: { id: updated.settlement.id },
+      data: {
+        status: internalStatus,
+        settledAt: internalStatus === 'successful' ? new Date() : undefined,
+        ...(internalStatus === 'failed' && { failureReason: 'Payout failed at provider' }),
+      },
+    });
+  }
 
   await writeAuditLog({
     userId: null,
@@ -130,13 +143,17 @@ const processWebhookEvent = async (webhookEventId) => {
 
     // Handle pay-in (collection) events
     if (eventType && (eventType.toLowerCase().includes('collection') || eventType.toLowerCase().includes('payin'))) {
-      await prisma.payinTransaction.upsert({
-        where: { fincraReference: data.reference || `unknown-${webhookEventId}` },
+      const customerReference = data.customerReference || data.customer_reference || null;
+      const fincraRef = data.reference || `unknown-${webhookEventId}`;
+
+      const payin = await prisma.payinTransaction.upsert({
+        where: { fincraReference: fincraRef },
         update: { status: fincraStatus || 'unknown', fincraRawPayload: payload },
         create: {
-          fincraReference: data.reference || `unknown-${webhookEventId}`,
+          fincraReference: fincraRef,
           customerName: data.customer?.name || null,
           customerEmail: data.customer?.email || null,
+          customerReference,
           amount: data.amount || 0,
           currency: data.currency || 'UNKNOWN',
           status: fincraStatus || 'unknown',
@@ -144,6 +161,16 @@ const processWebhookEvent = async (webhookEventId) => {
           receivedAt: new Date(),
         },
       });
+
+      // Attribute and auto-settle on successful pay-ins
+      if ((fincraStatus === 'successful' || fincraStatus === 'success') && !payin.isAttributed) {
+        const { attributePayin } = require('./attributionService');
+        const { attributed, client } = await attributePayin(payin.id, customerReference);
+        if (attributed && client) {
+          const { autoSettle } = require('./settlementService');
+          await autoSettle(payin.id);
+        }
+      }
     }
 
     await prisma.webhookEvent.update({

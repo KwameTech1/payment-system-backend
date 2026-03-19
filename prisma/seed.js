@@ -35,6 +35,50 @@ async function main() {
     });
     console.log(`Seeded user: ${userData.email}`);
   }
+
+  const clients = [
+    {
+      businessName: 'Client Business A',
+      email: 'clienta@example.com',
+      password: process.env.SEED_CLIENT_A_PASSWORD || 'ClientA1234!',
+      clientCode: 'BIZ001',
+      mobileNumber: '0241234567',
+      mobileOperator: 'MTN',
+      countryCode: 'GH',
+      currency: 'GHS',
+    },
+    {
+      businessName: 'Client Business B',
+      email: 'clientb@example.com',
+      password: process.env.SEED_CLIENT_B_PASSWORD || 'ClientB1234!',
+      clientCode: 'BIZ002',
+      mobileNumber: '0551234567',
+      mobileOperator: 'TELECEL',
+      countryCode: 'GH',
+      currency: 'GHS',
+    },
+  ];
+
+  for (const clientData of clients) {
+    const passwordHash = await bcrypt.hash(clientData.password, SALT_ROUNDS);
+    await prisma.client.upsert({
+      where: { email: clientData.email },
+      update: {},
+      create: {
+        businessName: clientData.businessName,
+        email: clientData.email,
+        passwordHash,
+        clientCode: clientData.clientCode,
+        mobileNumber: clientData.mobileNumber,
+        mobileOperator: clientData.mobileOperator,
+        countryCode: clientData.countryCode,
+        currency: clientData.currency,
+        feeRate: 0.02,
+        isActive: true,
+      },
+    });
+    console.log(`Seeded client: ${clientData.email} (${clientData.clientCode})`);
+  }
 }
 
 main()
