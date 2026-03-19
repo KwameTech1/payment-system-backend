@@ -1,8 +1,8 @@
-# PROJECT_NAME
+# payment-system-backend
 
-> Short description of what this project does.
+> Express.js API for the Payout Operations Platform — JWT auth, Prisma/PostgreSQL, Fincra integration.
 
-[![CI](https://github.com/YOUR_GITHUB_USERNAME/PROJECT_NAME/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_GITHUB_USERNAME/PROJECT_NAME/actions/workflows/ci.yml)
+[![CI](https://github.com/kwametech/payment-system-backend/actions/workflows/ci.yml/badge.svg)](https://github.com/kwametech/payment-system-backend/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 ---
@@ -14,20 +14,21 @@
 - [Folder Structure](#folder-structure)
 - [Scripts](#scripts)
 - [Environment Variables](#environment-variables)
-- [Database Setup (Railway PostgreSQL)](#database-setup-railway-postgresql)
+- [Database Setup](#database-setup)
 - [Deployment (Railway)](#deployment-railway)
-- [Development Workflow](#development-workflow)
-- [Contributing](#contributing)
+- [API Reference](#api-reference)
 - [License](#license)
 
 ---
 
 ## Overview
 
-Replace this section with a clear description of:
-- What this service does
-- Who it is for
-- What problem it solves
+Private backend service for the Payout Operations Platform — a controlled internal tool used by 2 operators to:
+
+1. Collect money via Fincra pay-in links
+2. Disburse payouts to approved mobile money recipients across multiple countries
+
+This is **not** a public-facing fintech app. There is no public signup, no wallet, and no batch payout in MVP. All recipients must be manually approved before receiving a payout.
 
 ---
 
@@ -37,59 +38,74 @@ Replace this section with a clear description of:
 
 - Node.js >= 18
 - npm >= 9
-- A Railway account (for deployment and PostgreSQL)
+- PostgreSQL (local or Railway)
 - Git
 
 ### Local Setup
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/YOUR_GITHUB_USERNAME/PROJECT_NAME.git
-cd PROJECT_NAME
+git clone https://github.com/kwametech/payment-system-backend.git
+cd payment-system-backend
 
 # 2. Install dependencies
 npm install
 
 # 3. Copy environment variables
 cp .env.example .env
+# Fill in .env — see Environment Variables section
 
-# 4. Fill in your local .env values (see Environment Variables section)
+# 4. Generate Prisma client
+npm run db:generate
 
-# 5. Start the development server
+# 5. Run migrations
+npm run db:migrate
+
+# 6. Seed the two internal users
+npm run db:seed
+
+# 7. Start the development server
 npm run dev
 ```
 
-The server will start at `http://localhost:3000` by default.
+Server starts at `http://localhost:3000`.
 
 ---
 
 ## Folder Structure
 
 ```
-PROJECT_NAME/
-├── src/                  # Application source code
-│   └── index.js          # Entry point
-├── tests/                # Automated tests
-│   └── index.test.js     # Example test file
-├── docs/                 # Documentation
-│   └── deployment.md     # Deployment guide
-├── scripts/              # Utility and automation scripts
-│   └── setup.sh          # Local setup helper
-├── .github/
-│   ├── ISSUE_TEMPLATE/   # GitHub issue templates
-│   ├── PULL_REQUEST_TEMPLATE.md
-│   └── workflows/
-│       └── ci.yml        # CI pipeline
-├── .env.example          # Environment variable reference
-├── .eslintrc.json        # ESLint config
-├── .prettierrc           # Prettier config
-├── .gitignore
-├── CHANGELOG.md
-├── CONTRIBUTING.md
-├── LICENSE
-├── package.json
-├── railway.json          # Railway deployment config
-└── README.md
+payment-system-backend/
+├── prisma/
+│   ├── schema.prisma         # All 6 Prisma models
+│   └── seed.js               # Seeds 2 internal users (upsert, safe to re-run)
+├── src/
+│   ├── app.js                # Express factory (imported by tests)
+│   ├── index.js              # Server entry point
+│   ├── db/
+│   │   └── client.js         # PrismaClient singleton
+│   ├── middleware/
+│   │   ├── auth.js           # JWT verify, attaches req.user
+│   │   ├── errorHandler.js   # Centralised error handler
+│   │   └── validate.js       # express-validator error wrapper
+│   ├── routes/
+│   │   ├── auth.js           # POST /auth/login
+│   │   ├── recipients.js     # GET/POST/PATCH /recipients
+│   │   ├── payouts.js        # GET/POST /payouts + retry + status-sync
+│   │   └── webhooks.js       # POST /webhooks/fincra (express.raw!)
+│   ├── services/
+│   │   ├── auditService.js
+│   │   ├── fincraService.js  # Stub mode — real calls commented with TODO
+│   │   ├── payoutService.js
+│   │   ├── recipientService.js
+│   │   └── webhookService.js
+│   └── workers/
+│       └── reconciliation.js # Cron: every 5 min, syncs stuck payouts
+├── tests/
+│   └── index.test.js         # 3 tests: health, root, 404
+├── .env.example
+├── railway.json
+└── package.json
 ```
 
 ---
@@ -98,156 +114,113 @@ PROJECT_NAME/
 
 | Script | Command | Description |
 |--------|---------|-------------|
-| Dev server | `npm run dev` | Start server with hot reload (nodemon) |
-| Build | `npm run build` | Compile/prepare for production |
-| Test | `npm test` | Run test suite |
-| Lint | `npm run lint` | Check code with ESLint |
-| Format | `npm run format` | Auto-format with Prettier |
-| Lint fix | `npm run lint:fix` | Auto-fix lint issues |
+| Dev server | `npm run dev` | Start with nodemon (hot reload) |
+| Start | `npm start` | Production start |
+| Test | `npm test` | Run Jest test suite |
+| Lint | `npm run lint` | ESLint (zero warnings) |
+| Format | `npm run format` | Prettier write |
+| DB migrate | `npm run db:migrate` | `prisma migrate dev` (local, creates migration files) |
+| DB deploy | `npm run db:deploy` | `prisma migrate deploy` (production/Railway) |
+| DB seed | `npm run db:seed` | `prisma db seed` (inserts 2 internal users) |
+| DB generate | `npm run db:generate` | `prisma generate` (regenerate client) |
 
 ---
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and fill in your values.
+Copy `.env.example` to `.env` and fill in values.
 
-| Variable | Description | Example (local) | Example (production) |
-|----------|-------------|-----------------|----------------------|
-| `PORT` | Port the server listens on | `3000` | `3000` |
-| `NODE_ENV` | Runtime environment | `development` | `production` |
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@localhost:5432/mydb` | Set by Railway |
-| `FRONTEND_URL` | Allowed CORS origin | `http://localhost:5173` | `https://yourfrontend.com` |
+| Variable | Description | Local example |
+|----------|-------------|---------------|
+| `PORT` | Server port | `3000` |
+| `NODE_ENV` | Runtime environment | `development` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@localhost:5432/payout_db` |
+| `FRONTEND_URL` | Allowed CORS origin | `http://localhost:3001` |
+| `JWT_SECRET` | Secret for signing JWTs | any long random string |
+| `JWT_EXPIRES_IN` | JWT expiry | `8h` |
+| `FINCRA_API_BASE_URL` | Fincra API base URL | `https://sandboxapi.fincra.com` |
+| `FINCRA_API_KEY` | Fincra API key | *(pending)* |
+| `FINCRA_BUSINESS_ID` | Fincra business ID | *(pending)* |
+| `FINCRA_WEBHOOK_SECRET` | Fincra webhook HMAC secret | *(pending)* |
 
-> **Never commit your `.env` file.** It is listed in `.gitignore`.
-
-See `.env.example` for the full reference.
+> **Fincra stub mode:** `fincraService.js` returns mock responses until real credentials are set. The real API call code is written and commented with `// TODO: uncomment when credentials available`.
 
 ---
 
-## Database Setup (Railway PostgreSQL)
+## Database Setup
 
-### Step 1 — Provision PostgreSQL on Railway
-
-1. Open your project in the [Railway dashboard](https://railway.app/dashboard).
-2. Click **New** → **Database** → **PostgreSQL**.
-3. Railway will provision a PostgreSQL instance and inject `DATABASE_URL` automatically into your backend service (if both are in the same project).
-
-### Step 2 — Wire DATABASE_URL to your backend
-
-Railway automatically provides the following variables to your service:
-
-```
-DATABASE_URL=postgresql://postgres:PASSWORD@HOST:PORT/railway
-```
-
-You do **not** need to set this manually in production — Railway injects it via the linked service environment.
-
-For local development, copy the connection string from the Railway dashboard:
-- Go to your PostgreSQL service → **Connect** tab → copy the connection URL.
-- Paste it into your local `.env` file as `DATABASE_URL`.
-
-### Step 3 — Values to replace manually
-
-When using a local PostgreSQL instance, replace these in your `.env`:
-
-```
-DATABASE_URL=postgresql://YOUR_USER:YOUR_PASSWORD@localhost:5432/YOUR_DB_NAME
-```
-
-### Step 4 — Post-deploy Verification
-
-After deploying, verify your backend can reach the database:
+### Local PostgreSQL
 
 ```bash
-# Check your /health endpoint
-curl https://YOUR_RAILWAY_SERVICE_URL/health
+# Create database
+createdb payout_db
 
-# Expected response
-{"status":"ok","db":"connected"}
+# Add to .env
+DATABASE_URL=postgresql://YOUR_USER:YOUR_PASSWORD@localhost:5432/payout_db
+
+# Run migrations and seed
+npm run db:migrate
+npm run db:seed
 ```
 
-> See `docs/deployment.md` for full deployment and database documentation.
+Seeded credentials:
+- `admin@payout.internal` / `Admin1234!`
+- `operator@payout.internal` / `Operator1234!`
+
+### Railway PostgreSQL
+
+See [`docs/deployment.md`](./docs/deployment.md) for full setup.
 
 ---
 
 ## Deployment (Railway)
 
-Railway handles deployment automatically via GitHub integration.
+Railway handles deployment via GitHub integration. See [`docs/deployment.md`](./docs/deployment.md) for:
 
-### Step 1 — Connect Repository to Railway
-
-1. Go to [Railway dashboard](https://railway.app/dashboard).
-2. Click **New Project** → **Deploy from GitHub repo**.
-3. Select this repository.
-4. Railway will auto-detect the Node.js project and deploy on every push to `main`.
-
-### Step 2 — Set Environment Variables
-
-In the Railway dashboard → your service → **Variables**, set:
-
-```
-NODE_ENV=production
-FRONTEND_URL=https://your-production-frontend-url.com
-```
-
-> `DATABASE_URL` and `PORT` are set automatically by Railway. Do not hardcode them.
-
-### Step 3 — Deploy
-
-Push to the `main` branch. Railway picks up the change and deploys automatically.
-
-```bash
-git push origin main
-```
-
-### Health Check
-
-Railway will ping your `/health` endpoint to verify the service is running.
-Make sure your server exposes a `GET /health` route that returns `200 OK`.
-
-> See `docs/deployment.md` for advanced deployment configuration.
+- Provisioning PostgreSQL on Railway
+- Setting environment variables
+- Running `prisma migrate deploy` on deploy
+- Health check configuration
 
 ---
 
-## Development Workflow
+## API Reference
 
-```bash
-# Create a new feature branch
-git checkout -b feat/your-feature-name
+All routes except `POST /auth/login` and `POST /webhooks/fincra` require `Authorization: Bearer <token>`.
 
-# Make your changes, then run checks
-npm run lint
-npm test
+### Auth
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/auth/login` | Email + password → JWT |
 
-# Commit using conventional commits
-git commit -m "feat: add your feature description"
+### Recipients
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/recipients` | List all (supports `?status=`) |
+| POST | `/recipients` | Create new recipient |
+| PATCH | `/recipients/:id` | Update status or notes |
 
-# Push and open a pull request
-git push origin feat/your-feature-name
-```
+### Payouts
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/payouts` | List all (supports `?status=`) |
+| GET | `/payouts/:id` | Single payout with recipient |
+| POST | `/payouts` | Create + submit payout |
+| POST | `/payouts/:id/retry` | Retry a failed payout |
+| GET | `/payouts/:id/status-sync` | Force Fincra status check |
 
-### Commit Message Convention
+### Webhooks
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/webhooks/fincra` | Fincra webhook receiver (HMAC verified) |
 
-Use [Conventional Commits](https://www.conventionalcommits.org/):
-
-| Prefix | Use for |
-|--------|---------|
-| `feat:` | New features |
-| `fix:` | Bug fixes |
-| `chore:` | Maintenance, deps |
-| `docs:` | Documentation only |
-| `test:` | Test additions or fixes |
-| `refactor:` | Code restructuring |
-| `ci:` | CI/CD changes |
-
----
-
-## Contributing
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines on how to contribute.
+### Health
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Returns `{"status":"ok"}` |
 
 ---
 
 ## License
 
-[MIT](./LICENSE) — see the LICENSE file for details.
+[MIT](./LICENSE) © KwameTech
