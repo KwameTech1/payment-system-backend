@@ -1,7 +1,7 @@
 'use strict';
 
 const request = require('supertest');
-const app = require('../src/index');
+const app = require('../src/app');
 
 describe('Health check', () => {
   it('GET /health returns 200 with status ok', async () => {
