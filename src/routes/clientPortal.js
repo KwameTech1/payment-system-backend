@@ -78,7 +78,7 @@ router.get('/settlements/:id', async (req, res, next) => {
 router.post('/withdrawal', async (req, res, next) => {
   try {
     const client = await prisma.client.findUnique({ where: { id: req.client.id } });
-    if (!client) return res.status(404).json({ error: 'Client not found' });
+    if (!client) { return res.status(404).json({ error: 'Client not found' }); }
 
     const amount = parseFloat(req.body.amount);
     if (!amount || isNaN(amount) || amount <= 0) {
