@@ -1,5 +1,6 @@
 'use strict';
 
+require('dotenv').config();
 const { PrismaClient } = require('@prisma/client');
 
 // Singleton pattern — prevents multiple PrismaClient instances in dev with nodemon hot reload
